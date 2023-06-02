@@ -27,7 +27,7 @@ Lang Hames (Apple); Vassil Vassilev (Princeton/CERN).
 
 ```bash
 git clone https://github.com/compiler-research/pldi-tutorials-2023.git
-cd pldi-tutorials-2023.git && mkdir build
+cd pldi-tutorials-2023 && mkdir build
 cmake -DCMAKE_CXX_STANDARD=17 -DLLVM_DIR=/path/to/llvm/ ../
 make
 ```
