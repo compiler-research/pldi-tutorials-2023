@@ -1,0 +1,6 @@
+add_subdirectory(p3-ex1)
+add_subdirectory(p3-ex2)
+add_subdirectory(p3-ex3)
+add_subdirectory(p3-ex4)
+add_subdirectory(p3-ex5)
+add_subdirectory(p3-ex-bonus)
