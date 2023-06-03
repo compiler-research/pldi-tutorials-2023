@@ -3,10 +3,10 @@ set(LLVM_LINK_COMPONENTS
   LineEditor
   Support
 )
-add_llvm_executable(p3ex4 p3-ex4.cpp)
-target_link_libraries(p3ex4
+add_llvm_executable(p3-ex4 p3-ex4.cpp)
+target_link_libraries(p3-ex4
   PRIVATE
   clangInterpreter
   )
 # Makes the binary symbols visible to the JIT.
-export_executable_symbols(p3ex4)
+export_executable_symbols(p3-ex4)

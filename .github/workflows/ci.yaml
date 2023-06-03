@@ -1,0 +1,136 @@
+name: Main
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  release:
+    types: [published]
+  schedule:
+    - cron: '30 20 * * *' # Warning: Timezone dep - 20:00 is 1:00
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: ubu22-gcc9-clang-repl-16
+            os: ubuntu-22.04
+            compiler: gcc-9
+            clang-runtime: '16'
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Save PR Info
+      run: |
+        mkdir -p ./pr
+        echo ${{ github.event.number }} > ./pr/NR
+        echo ${{ github.repository }} > ./pr/REPO
+
+        export LLVM_HASH=$(git ls-remote https://github.com/root-project/llvm-project.git release/${{ matrix.clang-runtime }}.x | tr '\t' '-')
+        echo "CLING_HASH=$CLING_HASH" >> $GITHUB_ENV
+        echo "LLVM_HASH=$LLVM_HASH" >> $GITHUB_ENV
+    - uses: nelonoel/branch-name@v1.0.1
+    - name: Setup compiler on Linux
+      if: runner.os == 'Linux'
+      run: |
+        # https://www.gnu.org/software/bash/manual/html_node/Shell-Parameter-Expansion.html
+        vers="${compiler#*-}"
+        os_codename="`cat /etc/os-release | grep UBUNTU_CODENAME | cut -d = -f 2`"
+        ##sudo apt update
+        if [[ "${{ matrix.compiler }}" == *"gcc"* ]]; then
+          sudo apt install -y gcc-${vers} g++-${vers} lld
+          echo "CC=gcc-${vers}" >> $GITHUB_ENV
+          echo "CXX=g++-${vers}" >> $GITHUB_ENV
+        else
+          if ! sudo apt install -y clang-${vers}; then
+            curl https://apt.llvm.org/llvm-snapshot.gpg.key | sudo apt-key add -
+            echo "deb https://apt.llvm.org/${os_codename}/ llvm-toolchain-${os_codename}-${vers} main" | sudo tee -a /etc/apt/sources.list
+            sudo apt update
+            sudo apt install -y clang-${vers}
+          fi
+          echo "CC=clang-${vers}" >> $GITHUB_ENV
+          echo "CXX=clang++-${vers}" >> $GITHUB_ENV
+        fi
+      env:
+        compiler: ${{ matrix.compiler }}
+    - name: Install deps on Linux
+      if: runner.os == 'Linux'
+      run: |
+        # Install deps
+        ##sudo apt update
+        sudo apt install git g++ debhelper devscripts gnupg python3 valgrind
+        conda install -y -q -c conda-forge \
+          distro \
+          pytest
+    - name: Restore Cache LLVM/Clang runtime build directory
+      uses: actions/cache/restore@v3
+      id: cache
+      with:
+        key: ${{ env.LLVM_HASH }}-${{ runner.os }}-${{ matrix.os }}-${{ matrix.compiler }}-clang-${{ matrix.clang-runtime }}
+        path: |
+          llvm-project
+    - name: Build LLVM on Linux if the cache is invalid
+      if: ${{ runner.os == 'Linux' && steps.cache.outputs.cache-hit != 'true' }}
+      run: |
+        git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
+        cd llvm-project
+        # Build
+        mkdir build
+        cd build
+        cmake -DLLVM_ENABLE_PROJECTS=clang                  \
+              -DLLVM_TARGETS_TO_BUILD="host;NVPTX"          \
+              -DCMAKE_BUILD_TYPE=Release                    \
+              -DLLVM_ENABLE_ASSERTIONS=ON                   \
+              -DLLVM_USE_LINKER=lld                         \
+              -DCLANG_ENABLE_STATIC_ANALYZER=OFF            \
+              -DCLANG_ENABLE_ARCMT=OFF                      \
+              -DCLANG_ENABLE_FORMAT=OFF                     \
+              -DCLANG_ENABLE_BOOTSTRAP=OFF                  \
+              ../llvm
+          cmake --build . --target clang clang-repl --parallel $(nproc --all)
+        cd ../../
+    - name: Save Cache LLVM/Clang runtime build directory
+      uses: actions/cache/save@v3
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      with:
+        path: |
+          llvm-project
+        key: ${{ steps.cache.outputs.cache-primary-key }}
+    - name: Build and run tutorials
+      run: |
+        LLVM_DIR="$(realpath llvm-project)"
+        LLVM_BUILD_DIR="$(realpath llvm-project/build)"
+        #CPLUS_INCLUDE_PATH="${LLVM_DIR}/llvm/include:${LLVM_DIR}/clang/include:${LLVM_BUILD_DIR}/include:${LLVM_BUILD_DIR}/tools/clang/include:$PWD/include"
+
+        # Build the tutorials next to the llvm-project.
+        mkdir build && cd build
+        cmake -DCMAKE_BUILD_TYPE=Release  \
+              -DLLVM_DIR=$LLVM_BUILD_DIR  \
+              -DLLVM_USE_LINKER=lld       \
+              -DBUILD_SHARED_LIBS=ON      \
+              ../
+        cmake --build . --target check-tutorials --parallel $(nproc --all)
+        cd ..
+    - name: Show debug info
+      if: ${{ failure() }}
+      run: |
+        export
+        echo $GITHUB_ENV
+    - name: Setup tmate session
+      if: ${{ failure() }}
+      uses: mxschmitt/action-tmate@v3
+      # When debugging increase to a suitable value!
+      timeout-minutes: ${{ github.event.pull_request && 1 || 20 }}
