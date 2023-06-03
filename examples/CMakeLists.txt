@@ -8,11 +8,14 @@ function(add_kaleidoscope_exercise ex_name)
   target_include_directories("${tgt}" PRIVATE ${CMAKE_SOURCE_DIR}/examples)
   target_include_directories("${tgt}" PRIVATE ${LLVM_INCLUDE_DIRS})
   target_compile_definitions("${tgt}" PRIVATE ${LLVM_DEFINITIONS})
-  target_link_libraries("${tgt}" ${KALEIDOSCOPE_LLVM_LIBS})
+  target_link_libraries("${tgt}" PRIVATE ${KALEIDOSCOPE_LLVM_LIBS})
 endfunction()
 
-list(APPEND ENABLED_TUTORIALS p1-ex1 p1-ex2 p1-ex3 p1-ex4 p1-ex5 p3-ex1 p3-ex2
-                              p3-ex3 p3-ex4 p3-ex5)
+list(APPEND ENABLED_TUTORIALS p3-ex1 p3-ex4 p3-ex5)
+
+if(LLVM_VERSION_MAJOR VERSION_GREATER 16)
+  list(APPEND ENABLED_TUTORIALS p1-ex1 p3-ex3 p3-ex2 p1-ex2 p1-ex3 p1-ex4 p1-ex5)
+endif()
 
 foreach(T IN LISTS ENABLED_TUTORIALS)
   add_subdirectory(${T})

@@ -26,6 +26,7 @@
 /// This file demonstrates how we could embed Clang and use it as a library in a
 /// codebase.
 
+#include "clang/Basic/Version.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Interpreter/Interpreter.h"
 
@@ -35,6 +36,28 @@
 
 llvm::ExitOnError ExitOnErr;
 
+static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
+#if CLANG_VERSION_MAJOR > 16
+  clang::IncrementalCompilerBuilder CB;
+  CB.SetCompilerArgs({"-std=c++17"});
+
+  // Create the incremental compiler instance.
+  std::unique_ptr<clang::CompilerInstance> CI;
+  CI = ExitOnErr(CB.CreateCpp());
+
+  // Create the interpreter instance.
+  std::unique_ptr<clang::Interpreter> Interp
+      = ExitOnErr(clang::Interpreter::create(std::move(CI)));
+
+  return std::move(Interp);
+#else
+  std::vector<const char *> ClangArgv = {"-Xclang", "-emit-llvm-only"};
+  auto CI = ExitOnErr(clang::IncrementalCompilerBuilder::create(ClangArgv));
+  return ExitOnErr(clang::Interpreter::create(std::move(CI)));
+#endif // CLANG_VERSION_MAJOR
+}
+
+
 int main() {
   using namespace clang;
 
@@ -43,21 +66,12 @@ int main() {
   // Allow low-level execution.
   llvm::InitializeNativeTarget();
   llvm::InitializeNativeTargetAsmPrinter();
-  // Initialize our builder class.
-  clang::IncrementalCompilerBuilder CB;
-  CB.SetCompilerArgs({"-std=c++20"});
-
-  // Create the incremental compiler instance.
-  std::unique_ptr<clang::CompilerInstance> CI;
-  CI = ExitOnErr(CB.CreateCpp());
-
   // Create the interpreter instance.
-  std::unique_ptr<Interpreter> Interp
-      = ExitOnErr(Interpreter::create(std::move(CI)));
+  std::unique_ptr<Interpreter> Interp = CreateInterpreter();
 
   llvm::LineEditor LE("pldi-cpp-repl");
   bool HadError = false;
-  while (std::optional<std::string> Line = LE.readLine()) {
+  while (auto Line = LE.readLine()) {
     if (*Line == "%quit")
       break;
     if (auto Err = Interp->ParseAndExecute(*Line)) {

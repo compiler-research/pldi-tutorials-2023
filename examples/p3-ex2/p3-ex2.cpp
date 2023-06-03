@@ -26,6 +26,7 @@
 /// This file demonstrates how we could embed Clang and use it as a library in a
 /// codebase.
 
+#include "clang/Basic/Version.h"
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Interpreter/Interpreter.h"
 
@@ -34,14 +35,8 @@
 
 llvm::ExitOnError ExitOnErr;
 
-int main() {
-  using namespace clang;
-
-  llvm::llvm_shutdown_obj Y; // Call llvm_shutdown() on exit.
-
-  // Allow low-level execution.
-  llvm::InitializeNativeTarget();
-  llvm::InitializeNativeTargetAsmPrinter();
+static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
+#if CLANG_VERSION_MAJOR > 16
   // Initialize our builder class.
   clang::IncrementalCompilerBuilder CB;
   CB.SetCompilerArgs({"-std=c++20"});
@@ -51,8 +46,28 @@ int main() {
   CI = ExitOnErr(CB.CreateCpp());
 
   // Create the interpreter instance.
-  std::unique_ptr<Interpreter> Interp
-      = ExitOnErr(Interpreter::create(std::move(CI)));
+  std::unique_ptr<clang::Interpreter> Interp
+      = ExitOnErr(clang::Interpreter::create(std::move(CI)));
+
+  return std::move(Interp);
+#else
+  std::vector<const char *> ClangArgv = {"-Xclang", "-emit-llvm-only"};
+  auto CI = ExitOnErr(IncrementalCompilerBuilder::create(ClangArgv));
+  return ExitOnErr(Interpreter::create(std::move(CI)));
+#endif // CLANG_VERSION_MAJOR
+}
+
+int main() {
+  using namespace clang;
+
+  llvm::llvm_shutdown_obj Y; // Call llvm_shutdown() on exit.
+
+  // Allow low-level execution.
+  llvm::InitializeNativeTarget();
+  llvm::InitializeNativeTargetAsmPrinter();
+
+  // Create the interpreter instance.
+  std::unique_ptr<Interpreter> Interp = CreateInterpreter();
 
   // Parse and execute simple code.
   ExitOnErr(Interp->ParseAndExecute(R"(extern "C" int printf(const char*,...);

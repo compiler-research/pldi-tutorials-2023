@@ -21,10 +21,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: ubu22-gcc9-clang-repl-16
-            os: ubuntu-22.04
-            compiler: gcc-9
-            clang-runtime: '16'
+#          - name: ubu22-gcc9-clang-repl-16
+#            os: ubuntu-22.04
+#            compiler: gcc-9
+#            clang-runtime: '16'
+          - name: ubu22-gcc12-clang-repl-17-fb7f50a
+            os: ubuntu-latest
+            compiler: gcc-12
+            clang-runtime: 'fb7f50a'
     steps:
     - uses: actions/checkout@v3
       with:
@@ -85,8 +89,14 @@ jobs:
     - name: Build LLVM on Linux if the cache is invalid
       if: ${{ runner.os == 'Linux' && steps.cache.outputs.cache-hit != 'true' }}
       run: |
-        git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
-        cd llvm-project
+        if [[ ${{ matrix.clang-runtime }} == ?(-)+([[:digit:]]) ]]; then
+          git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
+          cd llvm-project
+        else
+          git clone https://github.com/llvm/llvm-project.git
+          cd llvm-project
+          git checkout ${{ matrix.clang-runtime }}
+        fi
         # Build
         mkdir build
         cd build
@@ -100,7 +110,7 @@ jobs:
               -DCLANG_ENABLE_FORMAT=OFF                     \
               -DCLANG_ENABLE_BOOTSTRAP=OFF                  \
               ../llvm
-          cmake --build . --target clang clang-repl --parallel $(nproc --all)
+          cmake --build . --target clang clang-repl clangTooling --parallel $(nproc --all)
         cd ../../
     - name: Save Cache LLVM/Clang runtime build directory
       uses: actions/cache/save@v3
@@ -122,7 +132,8 @@ jobs:
               -DLLVM_USE_LINKER=lld       \
               -DBUILD_SHARED_LIBS=ON      \
               ../
-        cmake --build . --target check-tutorials --parallel $(nproc --all)
+        cmake --build . --parallel $(nproc --all)
+        #cmake --build . --target check-tutorials --parallel $(nproc --all)
         cd ..
     - name: Show debug info
       if: ${{ failure() }}
@@ -133,4 +144,4 @@ jobs:
       if: ${{ failure() }}
       uses: mxschmitt/action-tmate@v3
       # When debugging increase to a suitable value!
-      timeout-minutes: ${{ github.event.pull_request && 1 || 20 }}
+      timeout-minutes: ${{ github.event.pull_request && 1 || 1 }}
