@@ -1,3 +1,22 @@
+llvm_map_components_to_libnames(KALEIDOSCOPE_LLVM_LIBS
+  support lineeditor orcjit native core)
+
+function(add_kaleidoscope_exercise ex_name)
+  set(tgt "${ex_name}")
+  add_llvm_executable("${tgt}" "${ex_name}.cpp" ${CMAKE_SOURCE_DIR}/examples/Kaleidoscope.cpp)
+  set_property(TARGET "${tgt}" PROPERTY CXX_STANDARD 17)
+  target_include_directories("${tgt}" PRIVATE ${CMAKE_SOURCE_DIR}/examples)
+  target_include_directories("${tgt}" PRIVATE ${LLVM_INCLUDE_DIRS})
+  target_compile_definitions("${tgt}" PRIVATE ${LLVM_DEFINITIONS})
+  target_link_libraries("${tgt}" ${KALEIDOSCOPE_LLVM_LIBS})
+endfunction()
+
+add_subdirectory(p1-ex1)
+add_subdirectory(p1-ex2)
+add_subdirectory(p1-ex3)
+add_subdirectory(p1-ex4)
+add_subdirectory(p1-ex5)
+
 add_subdirectory(p3-ex1)
 add_subdirectory(p3-ex2)
 add_subdirectory(p3-ex3)

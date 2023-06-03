@@ -23,6 +23,12 @@ components and use them to quickly bootstrap their research projects.
 The tutorial will be given by Sunho Kim (De Anza College, Cupertino);
 Lang Hames (Apple); Vassil Vassilev (Princeton/CERN).
 
+# Structure
+
+The tutorials are separated in 3 parts available under examples folder. Each
+part is prefixed with `p1`, `p2` or `p3` and each tutorial respectively `ex1`,
+`ex2` and so on.
+
 # Build instructions
 
 ```bash
