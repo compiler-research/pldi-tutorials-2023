@@ -23,12 +23,12 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 
-/// This file demonstrates how we could embed Clang and use it as a library in a
-/// codebase.
+/// This file demonstrates how we could embed create a simple C++ repl.
 
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Interpreter/Interpreter.h"
 
+#include "llvm/LineEditor/LineEditor.h"
 #include "llvm/Support/ManagedStatic.h" // llvm_shutdown
 #include "llvm/Support/TargetSelect.h"
 
@@ -44,7 +44,7 @@ int main() {
   llvm::InitializeNativeTargetAsmPrinter();
   // Initialize our builder class.
   clang::IncrementalCompilerBuilder CB;
-  CB.SetCompilerArgs({"-std=c++20"});
+  CB.SetCompilerArgs({"-std=c++20"}); // pass `-xc` for a C REPL.
 
   // Create the incremental compiler instance.
   std::unique_ptr<clang::CompilerInstance> CI;
@@ -54,22 +54,16 @@ int main() {
   std::unique_ptr<Interpreter> Interp
       = ExitOnErr(Interpreter::create(std::move(CI)));
 
-  // Parse and execute simple code.
-  ExitOnErr(Interp->ParseAndExecute(R"(extern "C" int printf(const char*,...);
-                                       printf("Hello Interpreter World!\n");
-                                      )"));
+  llvm::LineEditor LE("pldi-cpp-repl");
+  bool HadError = false;
+  while (std::optional<std::string> Line = LE.readLine()) {
+    if (*Line == "%quit")
+      break;
+    if (auto Err = Interp->ParseAndExecute(*Line)) {
+      llvm::logAllUnhandledErrors(std::move(Err), llvm::errs(), "error: ");
+      HadError = true;
+    }
+  }
 
-  // Create a value to store the transport the execution result from the JIT.
-  clang::Value V;
-  ExitOnErr(Interp->ParseAndExecute(R"(extern "C" int square(int x){return x*x;}
-                                       square(12)
-                                      )", &V));
-  printf("From JIT: square(12)=%d\n", V.getInt());
-
-  // Or just get the function pointer and call it from compiled code:
-  auto SymAddr = ExitOnErr(Interp->getSymbolAddress("square"));
-  auto squarePtr = SymAddr.toPtr<int(*)(int)>();
-  printf("From compiled code: square(13)=%d\n", squarePtr(13));
-
-  // Can we instantiate templates on demand?
+  return HadError;
 }
