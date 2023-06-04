@@ -1,12 +1,18 @@
+set(LLVM_OPTIONAL_SOURCES p3-ex4.c p3-ex4-lib.cpp)
 set(LLVM_LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
-  LineEditor
   Support
 )
-add_llvm_executable(p3-ex4 p3-ex4.cpp)
-target_link_libraries(p3-ex4
-  PRIVATE
+add_llvm_library(p3-ex4-lib SHARED p3-ex4-lib.cpp
+  LINK_LIBS
+  clangAST
+  clangSema
   clangInterpreter
   )
-# Makes the binary symbols visible to the JIT.
-export_executable_symbols(p3-ex4)
+set_source_files_properties(p3-ex4-lib.cpp
+  PROPERTIES COMPILE_DEFINITIONS "LLVM_BINARY_DIR=\"${LLVM_BINARY_DIR}\"")
+add_llvm_executable(p3-ex4 p3-ex4.c)
+target_link_libraries(p3-ex4
+  PRIVATE
+  p3-ex4-lib
+  )

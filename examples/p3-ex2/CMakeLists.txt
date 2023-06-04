@@ -1,5 +1,6 @@
 set(LLVM_LINK_COMPONENTS
   ${LLVM_TARGETS_TO_BUILD}
+  LineEditor
   Support
 )
 add_llvm_executable(p3-ex2 p3-ex2.cpp)
