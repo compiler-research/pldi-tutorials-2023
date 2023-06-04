@@ -23,8 +23,7 @@
 // POSSIBILITY OF SUCH DAMAGE.
 
 
-/// This file demonstrates how we could embed Clang and use it as a library in a
-/// codebase.
+/// This file demonstrates how we could embed create a simple C++ repl.
 
 #include "clang/Frontend/CompilerInstance.h"
 #include "clang/Interpreter/Interpreter.h"
@@ -45,7 +44,7 @@ int main() {
   llvm::InitializeNativeTargetAsmPrinter();
   // Initialize our builder class.
   clang::IncrementalCompilerBuilder CB;
-  CB.SetCompilerArgs({"-std=c++20"});
+  CB.SetCompilerArgs({"-std=c++20"}); // pass `-xc` for a C REPL.
 
   // Create the incremental compiler instance.
   std::unique_ptr<clang::CompilerInstance> CI;
@@ -67,6 +66,4 @@ int main() {
   }
 
   return HadError;
-
-  // Can we instantiate templates on demand?
 }
