@@ -8,3 +8,5 @@ target_link_libraries(p3-ex3
   clangTooling
   clangInterpreter
   )
+# Makes the binary symbols visible to the JIT.
+export_executable_symbols(p3-ex3)

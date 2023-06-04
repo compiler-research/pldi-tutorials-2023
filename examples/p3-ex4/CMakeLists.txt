@@ -16,3 +16,5 @@ target_link_libraries(p3-ex4
   PRIVATE
   p3-ex4-lib
   )
+# Makes the binary symbols visible to the JIT.
+export_executable_symbols(p3-ex4)
