@@ -27,8 +27,10 @@
 
 #include "p3-ex5-lib.h"
 
-#include "clang/Interpreter/Interpreter.h"
+#include "clang/Basic/Version.h"
+#include "clang/Config/config.h"
 #include "clang/Frontend/CompilerInstance.h"
+#include "clang/Interpreter/Interpreter.h"
 #include "clang/Sema/Lookup.h"
 #include "clang/Sema/TemplateDeduction.h"
 
@@ -42,9 +44,34 @@ using namespace clang;
 
 llvm::ExitOnError ExitOnErr;
 
+std::string MakeResourcesPath() {
+  using namespace llvm;
+#ifdef LLVM_BINARY_DIR
+  StringRef Dir = LLVM_BINARY_DIR;
+#else
+  // Dir is bin/ or lib/, depending on where BinaryPath is.
+  void *MainAddr = (void *)(intptr_t)MakeResourcesPath;
+  std::string BinaryPath = llvm::sys::fs::getMainExecutable(/*Argv0=*/nullptr, MainAddr);
+
+  // build/tools/clang/unittests/Interpreter/Executable -> build/
+  StringRef Dir = sys::path::parent_path(BinaryPath);
+
+  Dir = sys::path::parent_path(Dir);
+  Dir = sys::path::parent_path(Dir);
+  Dir = sys::path::parent_path(Dir);
+  Dir = sys::path::parent_path(Dir);
+  //Dir = sys::path::parent_path(Dir);
+#endif // LLVM_BINARY_DIR
+  SmallString<128> P(Dir);
+  sys::path::append(P, CLANG_INSTALL_LIBDIR_BASENAME, "clang",
+                    CLANG_VERSION_MAJOR_STRING);
+  return P.str().str();
+}
+
 static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
   clang::IncrementalCompilerBuilder CB;
-  CB.SetCompilerArgs({"-std=c++17"});
+  std::string ResourceDir = MakeResourcesPath();
+  CB.SetCompilerArgs({"-resource-dir", ResourceDir.c_str(), "-std=c++20"});
 
   // Create the incremental compiler instance.
   std::unique_ptr<clang::CompilerInstance> CI;
@@ -54,14 +81,8 @@ static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
   std::unique_ptr<Interpreter> Interp
       = ExitOnErr(Interpreter::create(std::move(CI)));
 
-  return ExitOnErr(Interpreter::create(std::move(CI)));
+  return std::move(Interp);
 }
-
-// static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
-//   std::vector<const char *> ClangArgv = {"-Xclang", "-emit-llvm-only"};
-//   auto CI = llvm::cantFail(IncrementalCompilerBuilder::create(ClangArgv));
-//   return llvm::cantFail(Interpreter::create(std::move(CI)));
-// }
 
 struct LLVMInitRAII {
   LLVMInitRAII() {

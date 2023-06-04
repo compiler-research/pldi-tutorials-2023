@@ -1,7 +1,7 @@
 #include "p3-ex5-lib.h"
 
 int main(int argc, char **argv) {
-  Clang_Parse("void* operator new(__SIZE_TYPE__, void* __p);"
+  Clang_Parse("void* operator new(__SIZE_TYPE__, void* __p) noexcept;"
               "extern \"C\" int printf(const char*,...);"
               "class A {};"
               "class C {};"
