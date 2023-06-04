@@ -50,7 +50,7 @@ foreach(T IN LISTS ENABLED_TUTORIALS)
                        DEPENDS)
 endforeach()
 
-add_custom_target(check-tutorials COMMAND ${CMAKE_CTEST_COMMAND} -V
+add_custom_target(check-tutorials COMMAND ${CMAKE_CTEST_COMMAND} -V --output-on-failure
   DEPENDS TutorialsAsUnitTests WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
 
 set_target_properties(check-tutorials PROPERTIES FOLDER "Tutorials as tests")
