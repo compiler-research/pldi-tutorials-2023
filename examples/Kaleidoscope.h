@@ -1,3 +1,5 @@
+/* See the LICENSE file in the project root for license terms. */
+
 #ifndef KALEIDOSCOPE_H
 #define KALEIDOSCOPE_H
 

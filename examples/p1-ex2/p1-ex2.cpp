@@ -1,3 +1,5 @@
+/* See the LICENSE file in the project root for license terms. */
+
 #include "Kaleidoscope.h"
 
 #include "llvm/ExecutionEngine/Orc/EPCDynamicLibrarySearchGenerator.h"

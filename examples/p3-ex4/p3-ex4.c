@@ -1,3 +1,5 @@
+/* See the LICENSE file in the project root for license terms. */
+
 #include "p3-ex4-lib.h"
 
 int main(int argc, char **argv) {
