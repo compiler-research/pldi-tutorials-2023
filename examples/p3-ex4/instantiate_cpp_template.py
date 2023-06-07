@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 
 import ctypes
+import os
 
-libInterop = ctypes.CDLL("../../build/lib/libp3-ex4-lib.so", mode = ctypes.RTLD_GLOBAL)
+libpath = os.path.dirname(__file__) + "/../../build/lib/libp3-ex4-lib.so"
+
+libInterop = ctypes.CDLL(libpath, mode = ctypes.RTLD_GLOBAL)
 _cpp_compile = libInterop.Clang_Parse
 _cpp_compile.argtypes = [ctypes.c_char_p]
 
@@ -15,10 +18,9 @@ void* operator new(__SIZE_TYPE__, void* __p) noexcept;
 extern "C" int printf(const char*,...);
 class A {};
 class C {};
-class B {
-public:
-    template<typename T, typename S, typename U>
-    void callme(T, S, U*) { printf(" call me may B! \n"); }
+struct B : public A {
+  template<typename T, typename S, typename U>
+  void callme(T, S, U*) { printf(" call me may B! \n"); }
 };
 """)
 
@@ -108,25 +110,25 @@ def cpp_allocate(proxy):
 
 if __name__ == '__main__':
   # create a couple of types to play with
-  A = type('A', (), {
-    'handle'  : gIL.get_scope('A'),
-    '__new__' : cpp_allocate
+  CppA = type('A', (), {
+      'handle'  : gIL.get_scope('A'),
+      '__new__' : cpp_allocate
   })
   h = gIL.get_scope('B')
-  B = type('B', (A,), {
-    'handle'  : h,
-    '__new__' : cpp_allocate,
-    'callme'  : TemplateWrapper(h, 'callme')
+  CppB = type('B', (CppA,), {
+      'handle'  : h,
+      '__new__' : cpp_allocate,
+      'callme'  : TemplateWrapper(h, 'callme')
   })
-  C = type('C', (), {
-    'handle'  : gIL.get_scope('C'),
-    '__new__' : cpp_allocate
+  CppC = type('C', (), {
+      'handle'  : gIL.get_scope('C'),
+      '__new__' : cpp_allocate
   })
 
   # call templates
-  a = A()
-  b = B()
-  c = C()
+  a = CppA()
+  b = CppB()
+  c = CppC()
 
   # explicit template instantiation
   b.callme['A, int, C*'](a, 42, c)
