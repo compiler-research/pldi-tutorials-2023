@@ -56,7 +56,7 @@ static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
   std::unique_ptr<Interpreter> Interp
       = ExitOnErr(Interpreter::create(std::move(CI)));
 
-  return std::move(Interp);
+  return Interp;
 }
 
 struct LLVMInitRAII {

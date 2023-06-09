@@ -53,7 +53,7 @@ class InterOpLayerWrapper:
       # Instantiation is implicit from argument types
       meth = self._get_template(scope, name, ', '.join([a.__name__ for a in tpargs]))
     return CallCPPFunc(meth)
-    
+
   def construct(self, cpptype):
     return self._construct(cpptype)
 
