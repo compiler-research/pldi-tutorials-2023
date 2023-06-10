@@ -24,26 +24,27 @@ int main(int argc, char *argv[]) {
 
   llvm::LineEditor LE("kaleidoscope");
   while (auto Line = LE.readLine()) {
-    std::optional<KaleidoscopeParser::ParseResult> PR = P.parse(*Line);
-    if (!PR)
+    auto ParseResult = P.parse(*Line);
+    if (!ParseResult)
       continue;
 
     // If the parser generated a function then CodeGen it to LLVM IR and add
     // it to the JIT.
-    auto TSM = P.codegen(std::move(PR->Fn), J->DL);
-    if (!TSM)
+    // dbgs() << "Compiling " << ParseResult->FnAST->getName() << "\n";
+    auto IRMod = P.codegen(std::move(ParseResult->FnAST), J->DL);
+    if (!IRMod)
         continue;
 
-    ExitOnErr(J->CompileLayer.add(J->MainJD, std::move(*TSM)));
+    ExitOnErr(J->CompileLayer.add(J->MainJD, std::move(*IRMod)));
 
 
     // If this wasn't a top-level expression then just continue.
-    if (PR->TopLevelExpr.empty())
+    if (ParseResult->TopLevelExpr.empty())
       continue;
 
     // If this was a top-level expression then look it up and run it.
     Expected<ExecutorSymbolDef> ExprSym =
-      J->ES->lookup(&J->MainJD, J->Mangle(PR->TopLevelExpr));
+      J->ES->lookup(&J->MainJD, J->Mangle(ParseResult->TopLevelExpr));
     if (!ExprSym) {
       errs() << "Error: " << toString(ExprSym.takeError()) << "\n";
       continue;

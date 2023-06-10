@@ -42,7 +42,7 @@ public:
 struct KaleidoscopeParser {
 
   struct ParseResult {
-    std::unique_ptr<FunctionAST> Fn; // Null for prototypes.
+    std::unique_ptr<FunctionAST> FnAST; // Null for prototypes.
     std::string TopLevelExpr; // Name of expression function, if any.
   };
 
@@ -52,7 +52,7 @@ struct KaleidoscopeParser {
   std::optional<ParseResult> parse(llvm::StringRef Code);
 
   std::optional<llvm::orc::ThreadSafeModule>
-  codegen(std::unique_ptr<FunctionAST> Fn, const llvm::DataLayout &DL);
+  codegen(std::unique_ptr<FunctionAST> FnAST, const llvm::DataLayout &DL);
 
   std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 };
@@ -77,6 +77,7 @@ struct KaleidoscopeJIT {
 
     llvm::orc::JITTargetMachineBuilder JTMB(
         ES->getExecutorProcessControl().getTargetTriple());
+    JTMB.setCodeModel(llvm::CodeModel::Small);
 
     auto DL = JTMB.getDefaultDataLayoutForTarget();
     if (!DL)

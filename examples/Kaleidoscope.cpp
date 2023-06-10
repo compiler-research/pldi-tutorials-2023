@@ -1169,9 +1169,9 @@ KaleidoscopeParser::parse(llvm::StringRef Code) {
       }
       break;
     case tok_def:
-      if (auto Fn = ParseDefinition(*this)) {
+      if (auto FnAST = ParseDefinition(*this)) {
         ParseResult PR;
-        PR.Fn = std::move(Fn);
+        PR.FnAST = std::move(FnAST);
         return PR;
       } else {
         fprintf(stderr, "Error: Could not parse function definition\n");
@@ -1191,10 +1191,10 @@ KaleidoscopeParser::parse(llvm::StringRef Code) {
       break;
     }
     default:
-      if (auto Fn = ParseTopLevelExpr(*this)) {
+      if (auto FnAST = ParseTopLevelExpr(*this)) {
         ParseResult PR;
-        PR.Fn = std::move(Fn);
-        PR.TopLevelExpr = PR.Fn->getName();
+        PR.FnAST = std::move(FnAST);
+        PR.TopLevelExpr = PR.FnAST->getName();
         return PR;
       } else {
         fprintf(stderr, "Could not parse top-level expression\n");
@@ -1208,10 +1208,10 @@ KaleidoscopeParser::parse(llvm::StringRef Code) {
 }
 
 std::optional<ThreadSafeModule>
-KaleidoscopeParser::codegen(std::unique_ptr<FunctionAST> Fn,
+KaleidoscopeParser::codegen(std::unique_ptr<FunctionAST> FnAST,
                             const DataLayout &DL) {
   CodeGenContext CGCtx(DL);
-  if (!Fn->codegen(*this, CGCtx))
+  if (!FnAST->codegen(*this, CGCtx))
     return std::nullopt;
   return ThreadSafeModule(std::move(CGCtx.TheModule),
                           std::move(CGCtx.TheContext));
