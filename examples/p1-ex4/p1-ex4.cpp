@@ -10,6 +10,7 @@
 #include "llvm/Support/TargetSelect.h"
 
 #include <limits>
+#include <cmath>
 
 using namespace llvm;
 using namespace llvm::orc;
