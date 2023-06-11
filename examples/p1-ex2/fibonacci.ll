@@ -1,4 +1,4 @@
-; Run the program by "clang -o main main.ll && ./main"
+; Run the program by "clang -o fibonacci fibonacci.ll && ./fibonacci"
 
 @str = constant [4 x i8] c"%d\0"
 
