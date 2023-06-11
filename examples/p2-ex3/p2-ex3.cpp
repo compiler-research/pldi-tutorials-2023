@@ -3,7 +3,6 @@
 #include "Kaleidoscope.h"
 
 #include "llvm/ADT/ScopeExit.h"
-#include "llvm/ExecutionEngine/Orc/EPCDynamicLibrarySearchGenerator.h"
 #include "llvm/ExecutionEngine/Orc/EPCIndirectionUtils.h"
 #include "llvm/LineEditor/LineEditor.h"
 #include "llvm/Support/InitLLVM.h"
@@ -13,7 +12,6 @@
 
 using namespace llvm;
 using namespace llvm::orc;
-using namespace llvm::jitlink;
 
 class KaleidoscopeASTMU : public MaterializationUnit {
 public:
@@ -57,82 +55,6 @@ double handleLazyCompileFailure() {
   return std::numeric_limits<double>::signaling_NaN();
 }
 
-extern "C" double circleArea(double radius) {
-  return M_PI * radius * radius;
-}
-
-class MyPlugin : public ObjectLinkingLayer::Plugin {
-public:
-  void modifyPassConfig(MaterializationResponsibility &MR, LinkGraph &G,
-                        PassConfiguration &PassConfig) override {
-    PassConfig.PostAllocationPasses.push_back([this](LinkGraph &G) {
-      return printGraph(G);
-    });
-  }
-
-  Error notifyFailed(MaterializationResponsibility &MR) override {
-    return Error::success();
-  }
-  Error notifyRemovingResources(JITDylib &JD, ResourceKey K) override {
-    return Error::success();
-  }
-  void notifyTransferringResources(JITDylib &JD, ResourceKey DstKey,
-                                   ResourceKey SrcKey) override {}
-
-private:
-  Error printGraph(LinkGraph &G) {
-    // Print graph name:
-    outs() << "Graph " << G.getName() << "\n";
-
-    // Loop over sections
-    for (auto &Sec : G.sections()) {
-      outs() << "  Section " << Sec.getName() << ", "
-             << Sec.getMemProt() << "\n";
-
-      // Print section symbols
-      outs() << "  Symbols:\n";
-      for (auto *Sym : Sec.symbols())
-        if (Sym->hasName())
-          outs() << "    " << Sym->getAddress() << ": "
-                 << Sym->getName() << "\n";
-      outs() << "  Blocks:\n";
-
-      // Print section blocks and edges.
-      for (auto *B : Sec.blocks()) {
-        outs() << "    " << B->getAddress() << ": ";
-        if (B->isZeroFill())
-          outs() << "zero-fill";
-        else {
-          outs() << "content = { ";
-          for (size_t I = 0; I != std::min(B->getSize(), size_t(10)); ++I)
-            outs() << formatv("{0:x2}", (uint8_t)B->getContent()[I]) << " ";
-          if (B->getSize() > 10)
-            outs() << "... ";
-          outs() << "}";
-        }
-        outs() << ", " << B->getSize() << "-bytes, "
-               << B->edges_size() << " edges\n";
-        for (auto &E : B->edges()) {
-          outs() << "      offset " << E.getOffset() << ": "
-                 << G.getEdgeKindName(E.getKind()) << " edge to ";
-          if (E.getTarget().hasName())
-            outs() << E.getTarget().getName();
-          else
-            outs() << "<anonymous target @ " << E.getTarget().getAddress()
-                   << ">";
-          outs() << ", addend = " << E.getAddend() << "\n";
-        }
-      }
-    }
-    outs() <<"  External symbols:\n";
-    for (auto *Sym : G.external_symbols())
-      outs() << "    " << Sym->getName() << "\n";
-    outs() << "\n";
-
-    return Error::success();
-  }
-};
-
 int main(int argc, char *argv[]) {
   InitLLVM X(argc, argv);
 
@@ -143,13 +65,6 @@ int main(int argc, char *argv[]) {
   ExitOnError ExitOnErr("kaleidoscope: ");
 
   std::unique_ptr<KaleidoscopeJIT> J = ExitOnErr(KaleidoscopeJIT::Create());
-
-  auto &ProcessSymbolsJD = J->ES->createBareJITDylib("<Process_Symbols>");
-  ProcessSymbolsJD.addGenerator(ExitOnErr(
-    EPCDynamicLibrarySearchGenerator::GetForTargetProcess(*J->ES)));
-  J->MainJD.addToLinkOrder(ProcessSymbolsJD);
-
-  J->ObjLinkingLayer.addPlugin(std::make_unique<MyPlugin>());
 
   KaleidoscopeParser P;
 

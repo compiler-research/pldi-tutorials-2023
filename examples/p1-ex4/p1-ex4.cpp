@@ -1,138 +1,84 @@
-/* See the LICENSE file in the project root for license terms. */
-
-#include "Kaleidoscope.h"
-
-#include "llvm/ADT/ScopeExit.h"
-#include "llvm/ExecutionEngine/Orc/EPCDynamicLibrarySearchGenerator.h"
-#include "llvm/ExecutionEngine/Orc/EPCIndirectionUtils.h"
-#include "llvm/LineEditor/LineEditor.h"
-#include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/TargetSelect.h"
-
-#include <limits>
-#include <cmath>
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/PatternMatch.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
 
 using namespace llvm;
-using namespace llvm::orc;
-
-class KaleidoscopeASTMU : public MaterializationUnit {
-public:
-  KaleidoscopeASTMU(KaleidoscopeParser &P, KaleidoscopeJIT &J,
-                    std::unique_ptr<FunctionAST> FnAST)
-    : MaterializationUnit(getInterface(J, *FnAST)),
-      P(P), J(J), FnAST(std::move(FnAST)) {}
-
-  StringRef getName() const override {
-    return "KaleidoscopeASTMU";
+using namespace PatternMatch;
+namespace {
+  
+struct ModOpt : PassInfoMixin<ModOpt> {
+  PreservedAnalyses run(Function &Func, FunctionAnalysisManager &) {
+    for (auto& BasicBlock : Func) {
+      for (auto& Inst : BasicBlock) {
+        Value *A = nullptr, *B = nullptr, *C = nullptr, *Mod = nullptr;
+        if (match(&Inst, m_SRem(m_Sub(m_Add(m_Value(A), m_Value(C)), m_Value(B)), m_Value(Mod)))) {
+          if (C != Mod) continue; 
+          // Optimize (A - B + MOD) % MOD
+          IRBuilder<> Builder(&Inst);
+          auto* Sub = Builder.CreateSub(A, B);
+          // Cmp = A - B < 0
+          auto* Cmp = Builder.CreateICmp(ICmpInst::ICMP_SLT, A, B);
+          Inst.replaceAllUsesWith(Builder.CreateSelect(Cmp, Builder.CreateAdd(Sub, Mod), Sub));
+        } else if (match(&Inst, m_SRem(m_Add(m_Value(A), m_Value(B)), m_Value(Mod)))) {
+          // Optimize (A + B) % MOD
+          IRBuilder<> Builder(&Inst);
+          auto* Add = Builder.CreateAdd(A, B);
+          auto* Cmp = Builder.CreateICmp(ICmpInst::ICMP_SGE, Add, Mod);
+          Inst.replaceAllUsesWith(Builder.CreateSelect(Cmp, Builder.CreateSub(Add, Mod), Add));
+        } else if (match(&Inst, m_SRem(m_Mul(m_Value(A), m_Value(B)), m_Value(Mod)))) {
+          // TODO
+          /*
+          %4 = mul nsw i64 %1, %0, !dbg !22
+          %5 = sext i32 %2 to i64, !dbg !23
+          %6 = sitofp i32 %2 to x86_fp80, !dbg !24
+          %7 = fdiv x86_fp80 0xK3FFF8000000000000000, %6, !dbg !25
+          %8 = sitofp i64 %0 to x86_fp80, !dbg !26
+          %9 = fmul x86_fp80 %7, %8, !dbg !27
+          %10 = sitofp i64 %1 to x86_fp80, !dbg !28
+          %11 = fmul x86_fp80 %9, %10, !dbg !29
+          %12 = fptosi x86_fp80 %11 to i64, !dbg !30
+          %13 = mul nsw i64 %12, %5, !dbg !31
+          %14 = sub nsw i64 %4, %13, !dbg !32
+          call void @llvm.dbg.value(metadata i64 %14, metadata !20, metadata !DIExpression()), !dbg !21
+          %15 = lshr i64 %14, 63, !dbg !33
+          %16 = trunc i64 %15 to i32, !dbg !33
+          %17 = mul nuw nsw i32 %16, %2, !dbg !34
+          %18 = icmp slt i64 %14, %5, !dbg !35
+          %19 = zext i32 %2 to i64, !dbg !36
+          %20 = select i1 %18, i64 0, i64 %19, !dbg !36
+          %21 = sub i64 %14, %20, !dbg !37
+          %22 = trunc i64 %21 to i32, !dbg !38
+          %23 = add i32 %17, %22, !dbg !38
+          */
+        }
+      }
+    }
+    return PreservedAnalyses::all();
   }
 
-  void materialize(std::unique_ptr<MaterializationResponsibility> R) override {
-    // dbgs() << "Compiling " << FnAST->getName() << "\n";
-    if (auto IRMod = P.codegen(std::move(FnAST), J.DL))
-      J.CompileLayer.emit(std::move(R), std::move(*IRMod));
-    else
-      R->failMaterialization();
-  }
-
-private:
-
-  static MaterializationUnit::Interface
-  getInterface(KaleidoscopeJIT &J, FunctionAST &FnAST) {
-    SymbolFlagsMap Symbols;
-    Symbols[J.Mangle(FnAST.getName())] =
-        JITSymbolFlags::Exported | JITSymbolFlags::Callable;
-    return { std::move(Symbols), nullptr };
-  }
-
-  void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
-    llvm_unreachable("Kaleidoscope functions are not overridable");
-  }
-
-  KaleidoscopeParser &P;
-  KaleidoscopeJIT &J;
-  std::unique_ptr<FunctionAST> FnAST;
+  static bool isRequired() { return true; }
 };
 
-double handleLazyCompileFailure() {
-  return std::numeric_limits<double>::signaling_NaN();
+/* New PM Registration */
+llvm::PassPluginLibraryInfo getModOptPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "ModOpt", LLVM_VERSION_STRING,
+          [](PassBuilder &PB) {
+            PB.registerPipelineParsingCallback(
+                [](StringRef Name, llvm::FunctionPassManager &PM,
+                   ArrayRef<llvm::PassBuilder::PipelineElement>) {
+                  if (Name == "modopt") {
+                    PM.addPass(ModOpt());
+                    return true;
+                  }
+                  return false;
+                });
+          }};
 }
 
-extern "C" double circleArea(double radius) {
-  return M_PI * radius * radius;
+extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
+llvmGetPassPluginInfo() {
+  return getModOptPluginInfo();
 }
 
-int main(int argc, char *argv[]) {
-  InitLLVM X(argc, argv);
-
-  InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter();
-  InitializeNativeTargetAsmParser();
-
-  ExitOnError ExitOnErr("kaleidoscope: ");
-
-  std::unique_ptr<KaleidoscopeJIT> J = ExitOnErr(KaleidoscopeJIT::Create());
-
-  auto &ProcessSymbolsJD = J->ES->createBareJITDylib("<Process_Symbols>");
-  ProcessSymbolsJD.addGenerator(ExitOnErr(
-    EPCDynamicLibrarySearchGenerator::GetForTargetProcess(*J->ES)));
-  J->MainJD.addToLinkOrder(ProcessSymbolsJD);
-
-  KaleidoscopeParser P;
-
-  auto EPCIU =
-    ExitOnErr(EPCIndirectionUtils::Create(J->ES->getExecutorProcessControl()));
-  auto EPCIUCleanup = make_scope_exit([&]() {
-    if (auto Err = EPCIU->cleanup())
-      J->ES->reportError(std::move(Err));
-  });
-
-  auto &LCTM = EPCIU->createLazyCallThroughManager(
-      *J->ES, ExecutorAddr::fromPtr(&handleLazyCompileFailure));
-  ExitOnErr(setUpInProcessLCTMReentryViaEPCIU(*EPCIU));
-  auto ISM = EPCIU->createIndirectStubsManager();
-
-  llvm::LineEditor LE("kaleidoscope");
-  while (auto Line = LE.readLine()) {
-    auto ParseResult = P.parse(*Line);
-    if (!ParseResult)
-      continue;
-
-    // If the parser generated a function <func-name> then
-    //   (1) rename the function in the AST to <func-name>$impl
-    //   (2) Create lazy-reexport map from <func-name> to <func-name>$impl
-    //   (3) add the AST and lazy-reexports to the JIT
-    std::string FnImplName = ParseResult->FnAST->getName() + "$impl";
-    SymbolAliasMap ReExports({
-        { J->Mangle(ParseResult->FnAST->getName()),
-          { J->Mangle(FnImplName),
-            JITSymbolFlags::Exported | JITSymbolFlags::Callable }
-        }
-      });
-    ParseResult->FnAST->setName(std::move(FnImplName));
-
-    ExitOnErr(J->MainJD.define(
-        std::make_unique<KaleidoscopeASTMU>(P, *J,
-                                            std::move(ParseResult->FnAST))));
-
-    ExitOnErr(J->MainJD.define(
-          lazyReexports(LCTM, *ISM, J->MainJD, std::move(ReExports))));
-
-    // If this wasn't a top-level expression then just continue.
-    if (ParseResult->TopLevelExpr.empty())
-      continue;
-
-    // If this was a top-level expression then look it up and run it.
-    Expected<ExecutorSymbolDef> ExprSym =
-      J->ES->lookup(&J->MainJD, J->Mangle(ParseResult->TopLevelExpr));
-    if (!ExprSym) {
-      errs() << "Error: " << toString(ExprSym.takeError()) << "\n";
-      continue;
-    }
-
-    double (*Expr)() = ExprSym->getAddress().toPtr<double (*)()>();
-    double Result = Expr();
-    outs() << "Result = " << Result << "\n";
-  }
-
-  return 0;
 }

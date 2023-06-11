@@ -14,7 +14,7 @@ endfunction()
 list(APPEND ENABLED_TUTORIALS p3-ex1 p3-ex4)
 
 if(LLVM_VERSION_MAJOR VERSION_GREATER 16)
-  list(APPEND ENABLED_TUTORIALS p1-ex1 p3-ex3 p3-ex2 p1-ex2 p1-ex3 p1-ex4)
+  list(APPEND ENABLED_TUTORIALS p1-ex3 p1-ex4 p2-ex1 p2-ex2 p2-ex3 p2-ex4 p2-ex5 p3-ex2 p3-ex3)
 endif()
 
 foreach(T IN LISTS ENABLED_TUTORIALS)
@@ -31,7 +31,7 @@ add_custom_target(TutorialsAsUnitTests)
 set_target_properties(TutorialsAsUnitTests PROPERTIES FOLDER "Tutorials as tests")
 
 # FIXME: We should provide some demo input to these.
-list(APPEND INTERACTIVE_TUTORIALS p1-ex1 p1-ex2 p1-ex3 p1-ex4 p1-ex5 p3-ex2)
+list(APPEND INTERACTIVE_TUTORIALS p2-ex1 p2-ex2 p2-ex3 p2-ex4 p2-ex5 p3-ex2)
 
 set (TIMEOUT_VALUE 2400)
 # Add all tutorials as tests for ctest.

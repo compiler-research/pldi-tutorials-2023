@@ -1,127 +1,65 @@
-/* See the LICENSE file in the project root for license terms. */
+// You can try this optimization pass by following commands:
+// (on mac)
+//   make p1-ex3
+//   $LLVM_DIR/bin/opt -load-pass-plugin=$TUTORIAL_BUILD_DIR/lib/p1-ex3.dylib -passes="modopt,dce" -S ex.ll
+// (on linux)
+//   make p1-ex3
+//   $LLVM_DIR/bin/opt -load-pass-plugin=$TUTORIAL_BUILD_DIR/lib/p1-ex3.lib -passes="modopt,dce" -S ex.ll
+// You should see srem instruction is replaced by select instruction.
 
-#include "Kaleidoscope.h"
-
-#include "llvm/ADT/ScopeExit.h"
-#include "llvm/ExecutionEngine/Orc/EPCIndirectionUtils.h"
-#include "llvm/LineEditor/LineEditor.h"
-#include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/TargetSelect.h"
-
-#include <limits>
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/PatternMatch.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Passes/PassPlugin.h"
+#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
-using namespace llvm::orc;
+using namespace PatternMatch;
 
-class KaleidoscopeASTMU : public MaterializationUnit {
-public:
-  KaleidoscopeASTMU(KaleidoscopeParser &P, KaleidoscopeJIT &J,
-                    std::unique_ptr<FunctionAST> FnAST)
-    : MaterializationUnit(getInterface(J, *FnAST)),
-      P(P), J(J), FnAST(std::move(FnAST)) {}
-
-  StringRef getName() const override {
-    return "KaleidoscopeASTMU";
+namespace {
+  
+struct ModOpt : PassInfoMixin<ModOpt> {
+  PreservedAnalyses run(Function &Func, FunctionAnalysisManager &) {
+    for (auto& BasicBlock : Func) {
+      for (auto& Inst : BasicBlock) {
+        Value *A = nullptr, *B = nullptr, *Mod = nullptr;
+        // Pattern match (A + B) % MOD
+        if (match(&Inst, m_SRem(m_Add(m_Value(A), m_Value(B)), m_Value(Mod)))) {
+          IRBuilder<> Builder(&Inst);
+          auto* Add = Builder.CreateAdd(A, B);
+          // Cmp = A + B >= MOD
+          auto* Cmp = Builder.CreateICmp(ICmpInst::ICMP_SGE, Add, Mod);
+          // Inst <- Cmp ? (A+B-MOD) : (A+B)
+          Inst.replaceAllUsesWith(Builder.CreateSelect(Cmp, Builder.CreateSub(Add, Mod), Add));
+        }
+      }
+    }
+    return PreservedAnalyses::all();
   }
 
-  void materialize(std::unique_ptr<MaterializationResponsibility> R) override {
-    // dbgs() << "Compiling " << FnAST->getName() << "\n";
-    if (auto IRMod = P.codegen(std::move(FnAST), J.DL))
-      J.CompileLayer.emit(std::move(R), std::move(*IRMod));
-    else
-      R->failMaterialization();
-  }
-
-private:
-
-  static MaterializationUnit::Interface
-  getInterface(KaleidoscopeJIT &J, FunctionAST &FnAST) {
-    SymbolFlagsMap Symbols;
-    Symbols[J.Mangle(FnAST.getName())] =
-        JITSymbolFlags::Exported | JITSymbolFlags::Callable;
-    return { std::move(Symbols), nullptr };
-  }
-
-  void discard(const JITDylib &JD, const SymbolStringPtr &Sym) override {
-    llvm_unreachable("Kaleidoscope functions are not overridable");
-  }
-
-  KaleidoscopeParser &P;
-  KaleidoscopeJIT &J;
-  std::unique_ptr<FunctionAST> FnAST;
+  static bool isRequired() { return true; }
 };
 
-double handleLazyCompileFailure() {
-  return std::numeric_limits<double>::signaling_NaN();
+
+/* New PM Registration */
+llvm::PassPluginLibraryInfo getModOptPluginInfo() {
+  return {LLVM_PLUGIN_API_VERSION, "ModOpt", LLVM_VERSION_STRING,
+          [](PassBuilder &PB) {
+            PB.registerPipelineParsingCallback(
+                [](StringRef Name, llvm::FunctionPassManager &PM,
+                   ArrayRef<llvm::PassBuilder::PipelineElement>) {
+                  if (Name == "modopt") {
+                    PM.addPass(ModOpt());
+                    return true;
+                  }
+                  return false;
+                });
+          }};
 }
 
-int main(int argc, char *argv[]) {
-  InitLLVM X(argc, argv);
+extern "C" LLVM_ATTRIBUTE_WEAK ::llvm::PassPluginLibraryInfo
+llvmGetPassPluginInfo() {
+  return getModOptPluginInfo();
+}
 
-  InitializeNativeTarget();
-  InitializeNativeTargetAsmPrinter();
-  InitializeNativeTargetAsmParser();
-
-  ExitOnError ExitOnErr("kaleidoscope: ");
-
-  std::unique_ptr<KaleidoscopeJIT> J = ExitOnErr(KaleidoscopeJIT::Create());
-
-  KaleidoscopeParser P;
-
-  auto EPCIU =
-    ExitOnErr(EPCIndirectionUtils::Create(J->ES->getExecutorProcessControl()));
-  auto EPCIUCleanup = make_scope_exit([&]() {
-    if (auto Err = EPCIU->cleanup())
-      J->ES->reportError(std::move(Err));
-  });
-
-  auto &LCTM = EPCIU->createLazyCallThroughManager(
-      *J->ES, ExecutorAddr::fromPtr(&handleLazyCompileFailure));
-  ExitOnErr(setUpInProcessLCTMReentryViaEPCIU(*EPCIU));
-  auto ISM = EPCIU->createIndirectStubsManager();
-
-  llvm::LineEditor LE("kaleidoscope");
-  while (auto Line = LE.readLine()) {
-    auto ParseResult = P.parse(*Line);
-    if (!ParseResult)
-      continue;
-
-    // If the parser generated a function <func-name> then
-    //   (1) rename the function in the AST to <func-name>$impl
-    //   (2) Create lazy-reexport map from <func-name> to <func-name>$impl
-    //   (3) add the AST and lazy-reexports to the JIT
-    std::string FnImplName = ParseResult->FnAST->getName() + "$impl";
-    SymbolAliasMap ReExports({
-        { J->Mangle(ParseResult->FnAST->getName()),
-          { J->Mangle(FnImplName),
-            JITSymbolFlags::Exported | JITSymbolFlags::Callable }
-        }
-      });
-    ParseResult->FnAST->setName(std::move(FnImplName));
-
-    ExitOnErr(J->MainJD.define(
-        std::make_unique<KaleidoscopeASTMU>(P, *J,
-                                            std::move(ParseResult->FnAST))));
-
-    ExitOnErr(J->MainJD.define(
-          lazyReexports(LCTM, *ISM, J->MainJD, std::move(ReExports))));
-
-    // If this wasn't a top-level expression then just continue.
-    if (ParseResult->TopLevelExpr.empty())
-      continue;
-
-    // If this was a top-level expression then look it up and run it.
-    Expected<ExecutorSymbolDef> ExprSym =
-      J->ES->lookup(&J->MainJD, J->Mangle(ParseResult->TopLevelExpr));
-    if (!ExprSym) {
-      errs() << "Error: " << toString(ExprSym.takeError()) << "\n";
-      continue;
-    }
-
-    double (*Expr)() = ExprSym->getAddress().toPtr<double (*)()>();
-    double Result = Expr();
-    outs() << "Result = " << Result << "\n";
-  }
-
-  return 0;
 }

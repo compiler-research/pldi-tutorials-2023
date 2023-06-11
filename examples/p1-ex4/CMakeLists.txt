@@ -1,1 +1,1 @@
-add_kaleidoscope_exercise(p1-ex4)
+add_llvm_pass_plugin(p1-ex4 p1-ex4.cpp)
