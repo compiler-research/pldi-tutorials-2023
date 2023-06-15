@@ -93,14 +93,15 @@ jobs:
     - name: Build LLVM on Linux if the cache is invalid
       if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       run: |
-        if [[ ${{ matrix.clang-runtime }} == ?(-)+([[:digit:]]) ]]; then
-          git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
-          cd llvm-project
-        else
+        # :digit: does not work on osx
+        # if [[ ${{ matrix.clang-runtime }} == ?(-)+([[:digit:]]) ]]; then
+        #  git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
+        #  cd llvm-project
+        #else
           git clone https://github.com/llvm/llvm-project.git
           cd llvm-project
           git checkout ${{ matrix.clang-runtime }}
-        fi
+        #fi
         # Build
         mkdir build
         cd build
