@@ -91,7 +91,7 @@ jobs:
         path: |
           llvm-project
     - name: Build LLVM on Linux if the cache is invalid
-      if: ${{ runner.os == 'Linux' && steps.cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       run: |
         if [[ ${{ matrix.clang-runtime }} == ?(-)+([[:digit:]]) ]]; then
           git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
