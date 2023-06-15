@@ -109,7 +109,6 @@ jobs:
               -DLLVM_TARGETS_TO_BUILD="host;NVPTX"          \
               -DCMAKE_BUILD_TYPE=Release                    \
               -DLLVM_ENABLE_ASSERTIONS=ON                   \
-              -DLLVM_USE_LINKER=lld                         \
               -DCLANG_ENABLE_STATIC_ANALYZER=OFF            \
               -DCLANG_ENABLE_ARCMT=OFF                      \
               -DCLANG_ENABLE_FORMAT=OFF                     \
