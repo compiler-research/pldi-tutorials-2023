@@ -29,6 +29,10 @@ jobs:
             os: ubuntu-latest
             compiler: gcc-12
             clang-runtime: 'fb7f50a'
+          - name: osx-clang-clang-repl-17-fb7f50a
+            os: macos-latest
+            compiler: clang
+            clang-runtime: 'fb7f50a'
     steps:
     - uses: actions/checkout@v3
       with:
