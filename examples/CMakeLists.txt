@@ -32,11 +32,15 @@ set_target_properties(TutorialsAsUnitTests PROPERTIES FOLDER "Tutorials as tests
 
 # FIXME: We should provide some demo input to these.
 list(APPEND INTERACTIVE_TUTORIALS p2-ex1 p2-ex2 p2-ex3 p2-ex4 p2-ex5 p3-ex2)
+list(APPEND TUTORIALS_WITH_CUSTOM_COMMANDS p1-ex3 p1-ex4)
 
 set (TIMEOUT_VALUE 2400)
 # Add all tutorials as tests for ctest.
 foreach(T IN LISTS ENABLED_TUTORIALS)
   if (T IN_LIST INTERACTIVE_TUTORIALS)
+    continue()
+  endif()
+  if (T IN_LIST TUTORIALS_WITH_CUSTOM_COMMANDS)
     continue()
   endif()
 
