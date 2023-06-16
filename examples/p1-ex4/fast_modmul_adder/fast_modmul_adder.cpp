@@ -12,8 +12,6 @@ namespace {
 struct ModMulAdder : PassInfoMixin<ModMulAdder> {
   ModMulAdder(StringRef ModLLPath) : ModLLPath(ModLLPath) {}
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &) {
-    errs() << "added"
-           << "\n";
     SMDiagnostic Err;
     auto ModMul = parseIRFile(ModLLPath, Err, M.getContext());
     Linker::linkModules(M, std::move(ModMul));
