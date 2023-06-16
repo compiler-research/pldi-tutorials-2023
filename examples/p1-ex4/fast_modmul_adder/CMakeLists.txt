@@ -1,0 +1,1 @@
+add_llvm_pass_plugin(fast_modmul_adder fast_modmul_adder.cpp)

@@ -3,10 +3,6 @@
 #include <random>
 using namespace std;
 
-// constexpr int modmul(long long a, long long b, int M) {
-// 	long long ret = a * b - M * (long long)(1.L / M * a * b);
-// 	return ret + M * (ret < 0) - M * (ret >= (long long)M);
-// }
 constexpr int modmul(long long a, long long b, int M) {
 	return a*b%M;
 }
@@ -81,5 +77,5 @@ int main() {
   vector<long long> res = convolution(a,b,MOD);
   long long sum = 0;
   for (int a : res) sum += a;
-  cout << sum;
+  cout << sum << "\n";
 }
