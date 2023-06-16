@@ -59,19 +59,32 @@ static std::unique_ptr<clang::Interpreter> CreateInterpreter() {
   return Interp;
 }
 
-struct LLVMInitRAII {
-  LLVMInitRAII() {
-    llvm::InitializeNativeTarget();
-    llvm::InitializeNativeTargetAsmPrinter();
+class ExampleLibrary {
+public:
+  static clang::Interpreter* GetInterpreter() {
+    if (!Instance) {
+      Instance = std::unique_ptr<ExampleLibrary>(new ExampleLibrary());
+    }
+    return Instance->Interp;
   }
-  ~LLVMInitRAII() {llvm::llvm_shutdown();}
-} LLVMInit;
-
-/// FIXME: Leaks the interpreter object due to D107087.
-auto Interp = CreateInterpreter().release();
+private:
+  /// FIXME: Leaks the interpreter object due to D107087.
+  ExampleLibrary() : Interp(CreateInterpreter().release()) {
+  }
+  struct LLVMInitRAII {
+    LLVMInitRAII() {
+      llvm::InitializeNativeTarget();
+      llvm::InitializeNativeTargetAsmPrinter();
+    }
+    ~LLVMInitRAII() {llvm::llvm_shutdown();}
+  } LLVMInit;
+  clang::Interpreter* Interp;
+  static std::unique_ptr<ExampleLibrary> Instance;
+};
+std::unique_ptr<ExampleLibrary> ExampleLibrary::Instance = nullptr;
 
 void Clang_Parse(const char* Code) {
-  ExitOnErr(Interp->Parse(Code));
+  ExitOnErr(ExampleLibrary::GetInterpreter()->Parse(Code));
 }
 
 static LookupResult LookupName(Sema &SemaRef, const char* Name) {
@@ -84,12 +97,12 @@ static LookupResult LookupName(Sema &SemaRef, const char* Name) {
 }
 
 Decl_t Clang_LookupName(const char* Name, Decl_t Context /*=0*/) {
-  return LookupName(Interp->getCompilerInstance()->getSema(), Name).getFoundDecl();
+  return LookupName(ExampleLibrary::GetInterpreter()->getCompilerInstance()->getSema(), Name).getFoundDecl();
 }
 
 FnAddr_t Clang_GetFunctionAddress(Decl_t D) {
   clang::FunctionDecl *FD = static_cast<clang::FunctionDecl*>(D);
-  auto Addr = Interp->getSymbolAddress(FD);
+  auto Addr = ExampleLibrary::GetInterpreter()->getSymbolAddress(FD);
   if (!Addr)
     return 0;
   //return Addr.toPtr<void*>();
@@ -101,7 +114,7 @@ void * Clang_CreateObject(Decl_t RecordDecl) {
   clang::TypeDecl *TD = static_cast<clang::TypeDecl*>(RecordDecl);
   std::string Name = TD->getQualifiedNameAsString();
   const clang::Type *RDTy = TD->getTypeForDecl();
-  clang::ASTContext &C = Interp->getCompilerInstance()->getASTContext();
+  clang::ASTContext &C = ExampleLibrary::GetInterpreter()->getCompilerInstance()->getASTContext();
   size_t size = C.getTypeSize(RDTy);
   void * loc = malloc(size);
 
@@ -111,7 +124,7 @@ void * Clang_CreateObject(Decl_t RecordDecl) {
   std::stringstream ss;
   ss << "auto _v" << counter++ << " = " << "new ((void*)" << loc << ")" << Name << "();";
 
-  auto R = Interp->ParseAndExecute(ss.str());
+  auto R = ExampleLibrary::GetInterpreter()->ParseAndExecute(ss.str());
   if (!R)
     return nullptr;
 
@@ -133,8 +146,8 @@ Decl_t Clang_InstantiateTemplate(Decl_t Scope, const char* Name, const char* Arg
   if (!ArgList.empty())
     ss << '<' << Args << '>';
   ss  << ';';
-  auto PTU1 = &llvm::cantFail(Interp->Parse(ss.str()));
-  llvm::cantFail(Interp->Execute(*PTU1));
+  auto PTU1 = &llvm::cantFail(ExampleLibrary::GetInterpreter()->Parse(ss.str()));
+  llvm::cantFail(ExampleLibrary::GetInterpreter()->Execute(*PTU1));
 
   //PTU1->TUPart->dump();
 
