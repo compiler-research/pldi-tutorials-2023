@@ -4,7 +4,7 @@
 using namespace std;
 
 constexpr int modmul(long long a, long long b, int M) {
-	return a*b%M;
+  return a*b%M;
 }
 
 int ilog2(int n) {
