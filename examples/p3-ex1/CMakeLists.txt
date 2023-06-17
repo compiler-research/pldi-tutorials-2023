@@ -10,3 +10,4 @@ target_link_libraries(p3-ex1
   clangSerialization
   clangTooling
   )
+add_exercise_as_test(p3-ex1)

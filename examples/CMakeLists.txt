@@ -1,3 +1,31 @@
+# CI
+
+set(CTEST_BUILD_NAME
+  ${CMAKE_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}-${CMAKE_BUILD_TYPE})
+enable_testing()
+
+add_custom_target(TutorialsAsUnitTests)
+set_target_properties(TutorialsAsUnitTests PROPERTIES FOLDER "Tutorials as tests")
+
+# Specify COMMAND for passing a custom command to run
+function(add_exercise_as_test name)
+  cmake_parse_arguments(ARG "" "" "COMMAND" ${ARGN})
+  add_dependencies(TutorialsAsUnitTests ${name})
+  if (ARG_COMMAND)
+    set(CMD ${ARG_COMMAND})
+    string(REPLACE ";|;" " | " CMD ${CMD})
+  else()
+    set(CMD $<TARGET_FILE:${name}>)
+  endif()
+
+  add_test(NAME tutorial-${T} COMMAND bash -c ${CMD})
+  set_tests_properties(tutorial-${name} PROPERTIES
+                       TIMEOUT 2400
+                       LABELS
+                       DEPENDS)
+endfunction(add_exercise_as_test)
+
+
 llvm_map_components_to_libnames(KALEIDOSCOPE_LLVM_LIBS
   support lineeditor orcjit native core)
 
@@ -9,6 +37,9 @@ function(add_kaleidoscope_exercise ex_name)
   target_include_directories("${tgt}" PRIVATE ${LLVM_INCLUDE_DIRS})
   target_compile_definitions("${tgt}" PRIVATE ${LLVM_DEFINITIONS})
   target_link_libraries("${tgt}" PRIVATE ${KALEIDOSCOPE_LLVM_LIBS})
+  add_exercise_as_test(${tgt} COMMAND
+    [=[echo -e 'def add(a b) a + b\\\;\nadd(1, 2)\\\;']=] | $<TARGET_FILE:${tgt}>
+    )
 endfunction()
 
 list(APPEND ENABLED_TUTORIALS p3-ex1 p3-ex4)
@@ -19,39 +50,6 @@ endif()
 
 foreach(T IN LISTS ENABLED_TUTORIALS)
   add_subdirectory(${T})
-endforeach()
-
-# CI
-
-set(CTEST_BUILD_NAME
-  ${CMAKE_SYSTEM_NAME}-${CMAKE_HOST_SYSTEM_PROCESSOR}-${CMAKE_BUILD_TYPE})
-enable_testing()
-
-add_custom_target(TutorialsAsUnitTests)
-set_target_properties(TutorialsAsUnitTests PROPERTIES FOLDER "Tutorials as tests")
-
-# FIXME: We should provide some demo input to these.
-list(APPEND INTERACTIVE_TUTORIALS p2-ex1 p2-ex2 p2-ex3 p2-ex4 p2-ex5 p3-ex2)
-list(APPEND TUTORIALS_WITH_CUSTOM_COMMANDS p1-ex3 p1-ex4)
-
-set (TIMEOUT_VALUE 2400)
-# Add all tutorials as tests for ctest.
-foreach(T IN LISTS ENABLED_TUTORIALS)
-  if (T IN_LIST INTERACTIVE_TUTORIALS)
-    continue()
-  endif()
-  if (T IN_LIST TUTORIALS_WITH_CUSTOM_COMMANDS)
-    continue()
-  endif()
-
-  add_dependencies(TutorialsAsUnitTests ${T})
-  #set_property(TARGET ${T} PROPERTY RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR})
-
-  add_test(NAME tutorial-${T} COMMAND ${T})
-  set_tests_properties(tutorial-${T} PROPERTIES
-                       TIMEOUT "${TIMEOUT_VALUE}"
-                       LABELS
-                       DEPENDS)
 endforeach()
 
 add_custom_target(check-tutorials COMMAND ${CMAKE_CTEST_COMMAND} -V --output-on-failure

@@ -10,3 +10,4 @@ target_link_libraries(p3-ex3
   )
 # Makes the binary symbols visible to the JIT.
 export_executable_symbols(p3-ex3)
+add_exercise_as_test(p3-ex3)
