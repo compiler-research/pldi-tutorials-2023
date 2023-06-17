@@ -1,6 +1,6 @@
 ; Run the program by "clang -o triangular triangular.ll && ./triangular"
 
-@str = constant [4 x i8] c"%d\0"
+@str = constant [3 x i8] c"%d\00"
 
 declare i32 @printf(i8*, i32)
 

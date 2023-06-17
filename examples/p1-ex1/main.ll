@@ -1,6 +1,6 @@
 ; Run the program by "clang -o main main.ll && ./main"
 
-@str = constant [14 x i8] c"Hello, world\0"
+@str = constant [13 x i8] c"Hello, world\00"
 
 declare i32 @printf(i8*)
 
