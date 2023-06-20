@@ -15,7 +15,7 @@ tutorial is organized into three major parts:
   * Incremental compilation apt for dynamic programming languages (~45m)
     Outlines how to use Clang as a library to enable build basic C/C++/Python
     on-demand by building a C++ interpreter which connects to the Python
-    interpreter.
+    interpreter. Video available [here](https://youtu.be/Rvl1QitGWuM).
 
 Upon completion of the tutorials researchers learn how to set up various LLVM
 components and use them to quickly bootstrap their research projects.
