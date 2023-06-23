@@ -29,6 +29,10 @@ jobs:
             os: ubuntu-latest
             compiler: gcc-12
             clang-runtime: 'fb7f50a'
+          - name: osx-clang-clang-repl-17-fb7f50a
+            os: macos-latest
+            compiler: clang
+            clang-runtime: 'fb7f50a'
     steps:
     - uses: actions/checkout@v3
       with:
@@ -87,16 +91,17 @@ jobs:
         path: |
           llvm-project
     - name: Build LLVM on Linux if the cache is invalid
-      if: ${{ runner.os == 'Linux' && steps.cache.outputs.cache-hit != 'true' }}
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
       run: |
-        if [[ ${{ matrix.clang-runtime }} == ?(-)+([[:digit:]]) ]]; then
-          git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
-          cd llvm-project
-        else
+        # :digit: does not work on osx
+        # if [[ ${{ matrix.clang-runtime }} == ?(-)+([[:digit:]]) ]]; then
+        #  git clone --depth=1 -b release/${{ matrix.clang-runtime }}.x https://github.com/llvm/llvm-project.git
+        #  cd llvm-project
+        #else
           git clone https://github.com/llvm/llvm-project.git
           cd llvm-project
           git checkout ${{ matrix.clang-runtime }}
-        fi
+        #fi
         # Build
         mkdir build
         cd build
@@ -104,7 +109,6 @@ jobs:
               -DLLVM_TARGETS_TO_BUILD="host;NVPTX"          \
               -DCMAKE_BUILD_TYPE=Release                    \
               -DLLVM_ENABLE_ASSERTIONS=ON                   \
-              -DLLVM_USE_LINKER=lld                         \
               -DCLANG_ENABLE_STATIC_ANALYZER=OFF            \
               -DCLANG_ENABLE_ARCMT=OFF                      \
               -DCLANG_ENABLE_FORMAT=OFF                     \
@@ -121,8 +125,8 @@ jobs:
         key: ${{ steps.cache.outputs.cache-primary-key }}
     - name: Build and run tutorials
       run: |
-        LLVM_DIR="$(realpath llvm-project)"
-        LLVM_BUILD_DIR="$(realpath llvm-project/build)"
+        LLVM_DIR="$(python -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' llvm-project)"
+        LLVM_BUILD_DIR="$(python -c 'import os, sys; print(os.path.realpath(sys.argv[1]))'  llvm-project/build)"
         #CPLUS_INCLUDE_PATH="${LLVM_DIR}/llvm/include:${LLVM_DIR}/clang/include:${LLVM_BUILD_DIR}/include:${LLVM_BUILD_DIR}/tools/clang/include:$PWD/include"
 
         # Build the tutorials next to the llvm-project.
@@ -143,4 +147,4 @@ jobs:
       if: ${{ failure() }}
       uses: mxschmitt/action-tmate@v3
       # When debugging increase to a suitable value!
-      timeout-minutes: ${{ github.event.pull_request && 1 || 1 }}
+      timeout-minutes: ${{ github.event.pull_request && 40 || 40 }}
